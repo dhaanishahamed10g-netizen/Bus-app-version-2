@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { MapPin, Users, Battery, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Navigation, Settings } from 'lucide-react-native';
+import LiveMap from '../../components/LiveMap';
+import { MapPin, Users, Battery, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Navigation, Settings, QrCode, Download, X } from 'lucide-react-native';
 
 export default function BusesScreen() {
   const [selectedBus, setSelectedBus] = useState<string | null>(null);
+  const [showQRCodes, setShowQRCodes] = useState(false);
+  const [selectedBusForQR, setSelectedBusForQR] = useState<string | null>(null);
   const { user } = useSelector((state: RootState) => state.auth);
 
   // Mock bus data
@@ -84,6 +86,27 @@ export default function BusesScreen() {
     Alert.alert('Bus Settings', `Configure settings for bus ${busId}`);
   };
 
+  const handleGenerateQRCodes = (busId: string) => {
+    setSelectedBusForQR(busId);
+    setShowQRCodes(true);
+  };
+
+  const handleDownloadQRCodes = (busId: string) => {
+    Alert.alert(
+      'Download QR Codes',
+      `Generate and download QR codes for all seats in bus ${busId}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Generate PDF', 
+          onPress: () => {
+            Alert.alert('QR Codes Generated', `QR codes for bus ${busId} have been generated and are ready for download.`);
+          }
+        }
+      ]
+    );
+  };
+
   const handleSendMessage = (busId: string) => {
     Alert.alert(
       'Send Message',
@@ -108,33 +131,11 @@ export default function BusesScreen() {
         <Text style={styles.subtitle}>{buses.filter(b => b.status === 'active').length} Active • {buses.length} Total</Text>
       </View>
 
-      <MapView
-        style={styles.map}
-        region={{
-          latitude: 37.79025,
-          longitude: -122.4344,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        }}
-      >
-        {buses.map((bus) => (
-          <Marker
-            key={bus.id}
-            coordinate={bus.location}
-            title={`Bus ${bus.number}`}
-            description={`${bus.occupancy}/${bus.capacity} passengers`}
-            onPress={() => handleBusSelect(bus.id)}
-          >
-            <View style={[
-              styles.busMarker,
-              { borderColor: getStatusColor(bus.status) },
-              selectedBus === bus.id && styles.selectedMarker
-            ]}>
-              <Text style={styles.busNumber}>{bus.number}</Text>
-            </View>
-          </Marker>
-        ))}
-      </MapView>
+      <LiveMap
+        showUserLocation={false}
+        selectedBusId={selectedBus || undefined}
+        onBusSelect={handleBusSelect}
+      />
 
       <ScrollView style={styles.busList}>
         <View style={styles.listHeader}>
@@ -204,6 +205,14 @@ export default function BusesScreen() {
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
+                  style={[styles.actionButton, styles.qrButton]}
+                  onPress={() => handleGenerateQRCodes(bus.id)}
+                >
+                  <QrCode size={16} color="white" />
+                  <Text style={styles.actionButtonText}>QR Codes</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
                   style={[styles.actionButton, styles.secondaryButton]}
                   onPress={() => handleBusSettings(bus.id)}
                 >
@@ -215,6 +224,45 @@ export default function BusesScreen() {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      <Modal visible={showQRCodes} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.qrModal}>
+          <View style={styles.qrModalHeader}>
+            <Text style={styles.qrModalTitle}>
+              QR Codes - Bus {selectedBusForQR}
+            </Text>
+            <TouchableOpacity onPress={() => setShowQRCodes(false)}>
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.qrGrid}>
+            <View style={styles.qrActions}>
+              <TouchableOpacity 
+                style={styles.downloadButton}
+                onPress={() => selectedBusForQR && handleDownloadQRCodes(selectedBusForQR)}
+              >
+                <Download size={20} color="white" />
+                <Text style={styles.downloadButtonText}>Download All as PDF</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.seatsGrid}>
+              {Array.from({ length: 40 }, (_, i) => i + 1).map((seatNumber) => (
+                <View key={seatNumber} style={styles.qrCodeCard}>
+                  <View style={styles.qrCodePlaceholder}>
+                    <QrCode size={40} color="#6B7280" />
+                  </View>
+                  <Text style={styles.seatLabel}>Seat {seatNumber}</Text>
+                  <Text style={styles.qrCodeId}>
+                    {selectedBusForQR}-{seatNumber.toString().padStart(2, '0')}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -238,25 +286,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.8)',
-  },
-  map: {
-    height: 200,
-  },
-  busMarker: {
-    backgroundColor: 'white',
-    padding: 8,
-    borderRadius: 12,
-    borderWidth: 3,
-    minWidth: 40,
-    alignItems: 'center',
-  },
-  selectedMarker: {
-    backgroundColor: '#FEF2F2',
-  },
-  busNumber: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#1F2937',
   },
   busList: {
     flex: 1,
@@ -374,6 +403,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
   },
+  qrButton: {
+    backgroundColor: '#8B5CF6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
   actionButtonText: {
     color: 'white',
     fontWeight: '600',
@@ -390,5 +426,81 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     marginLeft: 4,
+  },
+  qrModal: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  qrModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  qrModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  qrGrid: {
+    flex: 1,
+    padding: 20,
+  },
+  qrActions: {
+    marginBottom: 20,
+  },
+  downloadButton: {
+    backgroundColor: '#4F46E5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 12,
+  },
+  downloadButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  seatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  qrCodeCard: {
+    width: '48%',
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  qrCodePlaceholder: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  seatLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  qrCodeId: {
+    fontSize: 12,
+    color: '#6B7280',
   },
 });

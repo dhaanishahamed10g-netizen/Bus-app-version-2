@@ -68,6 +68,17 @@ export interface SeatOccupancy {
   isOccupied: boolean;
   studentId?: string;
   checkInTime?: string;
+  qrCode?: string;
+}
+
+export interface SeatReservation {
+  id: string;
+  busId: string;
+  seatNumber: string;
+  studentId: string;
+  timestamp: string;
+  qrData: string;
+  status: 'active' | 'completed' | 'cancelled';
 }
 
 export interface SOSAlert {
@@ -99,4 +110,23 @@ export interface Notification {
   timestamp: string;
   isRead: boolean;
   data?: any;
+}
+
+export interface LiveMessage {
+  id: string;
+  content: string;
+  sender: string;
+  senderRole: 'driver' | 'admin';
+  busId: string;
+  routeId: string;
+  type: 'announcement' | 'alert' | 'info';
+  timestamp: string;
+  recipients: string[];
+}
+
+export interface QRCodeData {
+  type: 'bus_seat';
+  busId: string;
+  seatNumber: string;
+  generatedAt: string;
 }

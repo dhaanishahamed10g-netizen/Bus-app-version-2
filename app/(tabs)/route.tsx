@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
+import LiveMap from '../../components/LiveMap';
+import MessagingPanel from '../../components/MessagingPanel';
+import { socketService } from '../../services/socketService';
 import { Play, Square, MapPin, Clock, Users, MessageSquare, Navigation, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from 'lucide-react-native';
 
 export default function RouteScreen() {
   const [tripActive, setTripActive] = useState(false);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  const [showMessaging, setShowMessaging] = useState(false);
+  const [selectedBusId, setSelectedBusId] = useState<string>('A-101');
   const { user } = useSelector((state: RootState) => state.auth);
 
   // Mock route data
@@ -18,6 +22,42 @@ export default function RouteScreen() {
     { id: '4', name: 'Main Gate', location: { latitude: 37.79425, longitude: -122.4384 }, completed: false, waitingStudents: 7 },
     { id: '5', name: 'Library', location: { latitude: 37.79625, longitude: -122.4404 }, completed: false, waitingStudents: 2 },
   ];
+
+  useEffect(() => {
+    if (user && user.role === 'driver') {
+      socketService.connect(user.id, user.role);
+      socketService.joinBusChannel(selectedBusId);
+      
+      // Start location sharing when trip is active
+      if (tripActive) {
+        startLocationSharing();
+      }
+    }
+
+    return () => {
+      if (tripActive) {
+        stopLocationSharing();
+      }
+    };
+  }, [tripActive, user]);
+
+  const startLocationSharing = () => {
+    // Mock location sharing - in real app, use actual GPS
+    const locationInterval = setInterval(() => {
+      const mockLocation = {
+        latitude: 37.78825 + (Math.random() - 0.5) * 0.01,
+        longitude: -122.4324 + (Math.random() - 0.5) * 0.01,
+      };
+      
+      socketService.sendLocationUpdate(selectedBusId, mockLocation, 12);
+    }, 5000);
+
+    return locationInterval;
+  };
+
+  const stopLocationSharing = () => {
+    // Stop location sharing
+  };
 
   if (!user || user.role !== 'driver') {
     return (
@@ -37,6 +77,7 @@ export default function RouteScreen() {
           text: 'Start Trip', 
           onPress: () => {
             setTripActive(true);
+            startLocationSharing();
             Alert.alert('Trip Started', 'Students have been notified. Safe driving!');
           }
         }
@@ -56,6 +97,7 @@ export default function RouteScreen() {
           onPress: () => {
             setTripActive(false);
             setCurrentStopIndex(0);
+            stopLocationSharing();
             Alert.alert('Trip Ended', 'Trip has been completed successfully.');
           }
         }
@@ -80,21 +122,8 @@ export default function RouteScreen() {
     );
   };
 
-  const handleSendAnnouncement = () => {
-    Alert.alert(
-      'Send Announcement',
-      'What would you like to announce?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Running Late', onPress: () => sendAnnouncement('Running 10 minutes behind schedule due to traffic.') },
-        { text: 'Next Stop', onPress: () => sendAnnouncement('Approaching next stop in 3 minutes.') },
-        { text: 'Custom', onPress: () => Alert.alert('Custom Message', 'Custom message feature coming soon!') }
-      ]
-    );
-  };
-
-  const sendAnnouncement = (message: string) => {
-    Alert.alert('Announcement Sent', `Message: "${message}" has been sent to all passengers.`);
+  const handleOpenMessaging = () => {
+    setShowMessaging(true);
   };
 
   return (
@@ -116,49 +145,20 @@ export default function RouteScreen() {
               <Square size={20} color="white" />
               <Text style={styles.endButtonText}>End Trip</Text>
             </TouchableOpacity>
-            
+              onPress={handleOpenMessaging}
             <TouchableOpacity style={styles.announceButton} onPress={handleSendAnnouncement}>
               <MessageSquare size={20} color="white" />
-              <Text style={styles.announceButtonText}>Announce</Text>
+              <Text style={styles.announceButtonText}>Message</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      <MapView
-        style={styles.map}
-        region={{
-          latitude: 37.79025,
-          longitude: -122.4344,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        }}
-      >
-        {/* Route Polyline */}
-        <Polyline
-          coordinates={routeStops.map(stop => stop.location)}
-          strokeColor="#059669"
-          strokeWidth={4}
-        />
-        
-        {/* Stop Markers */}
-        {routeStops.map((stop, index) => (
-          <Marker
-            key={stop.id}
-            coordinate={stop.location}
-            title={stop.name}
-            description={`${stop.waitingStudents} students waiting`}
-          >
-            <View style={[
-              styles.stopMarker,
-              stop.completed ? styles.completedStop : styles.pendingStop,
-              index === currentStopIndex && styles.currentStop
-            ]}>
-              <Text style={styles.stopNumber}>{index + 1}</Text>
-            </View>
-          </Marker>
-        ))}
-      </MapView>
+      <LiveMap
+        showUserLocation={false}
+        selectedBusId={selectedBusId}
+        onBusSelect={setSelectedBusId}
+      />
 
       <ScrollView style={styles.stopsList}>
         <Text style={styles.stopsTitle}>Route Stops</Text>
@@ -206,6 +206,16 @@ export default function RouteScreen() {
           </View>
         ))}
       </ScrollView>
+
+      <Modal visible={showMessaging} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Send Message to Passengers</Text>
+          <TouchableOpacity onPress={() => setShowMessaging(false)}>
+            <X size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+        <MessagingPanel />
+      </Modal>
     </View>
   );
 }
@@ -284,32 +294,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  map: {
-    height: 200,
-  },
-  stopMarker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'white',
-  },
-  completedStop: {
-    backgroundColor: '#10B981',
-  },
-  pendingStop: {
-    backgroundColor: '#6B7280',
-  },
-  currentStop: {
-    backgroundColor: '#F59E0B',
-  },
-  stopNumber: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   stopsList: {
     flex: 1,
     padding: 20,
@@ -383,5 +367,20 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     marginLeft: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
   },
 });
