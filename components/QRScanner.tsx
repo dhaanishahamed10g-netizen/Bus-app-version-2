@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-na
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
-import { X, QrCode, CheckCircle } from 'lucide-react-native';
+import { X, QrCode, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface QRScannerProps {
   visible: boolean;
