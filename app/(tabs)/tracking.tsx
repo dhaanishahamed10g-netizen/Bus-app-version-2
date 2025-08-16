@@ -7,17 +7,7 @@ import LiveMap from '../../components/LiveMap';
 import QRScanner from '../../components/QRScanner';
 import { qrService } from '../../services/qrService';
 import { socketService } from '../../services/socketService';
-import { 
-  Navigation, 
-  Users, 
-  Clock, 
-  MapPin,
-  QrCode,
-  Bell,
-  Zap,
-  CheckCircle,
-  X
-} from 'lucide-react-native';
+import { Navigation, Users, Clock, MapPin, QrCode, Bell, Zap, CircleCheck as CheckCircle, X } from 'lucide-react-native';
 
 export default function TrackingScreen() {
   const [userLocation, setUserLocation] = useState<any>(null);
